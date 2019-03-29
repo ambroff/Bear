@@ -47,6 +47,27 @@
 #include <pthread.h>
 #include <errno.h>
 
+#if defined(__HAIKU__)
+#define LC_CTYPE_MASK (1 << LC_CTYPE)
+
+typedef void* locale_t;
+
+static inline locale_t newlocale(int mask, const char *locale, locale_t base) {
+  (void) mask; (void)locale; (void)base;
+  return NULL;
+}
+
+static inline locale_t uselocale(locale_t loc) {
+  (void) loc;
+  return NULL;
+}
+
+static inline void freelocale(locale_t loc) {
+  (void) loc;
+}
+
+#endif // HAIKU
+
 #if defined HAVE_XLOCALE_HEADER
 #include <xlocale.h>
 #endif
