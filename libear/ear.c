@@ -38,7 +38,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <locale.h>
 #include <unistd.h>
 #include <dlfcn.h>
 #include <sys/stat.h>
@@ -46,31 +45,6 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <errno.h>
-
-#if defined(__HAIKU__)
-#define LC_CTYPE_MASK (1 << LC_CTYPE)
-
-typedef void* locale_t;
-
-static inline locale_t newlocale(int mask, const char *locale, locale_t base) {
-  (void) mask; (void)locale; (void)base;
-  return NULL;
-}
-
-static inline locale_t uselocale(locale_t loc) {
-  (void) loc;
-  return NULL;
-}
-
-static inline void freelocale(locale_t loc) {
-  (void) loc;
-}
-
-#endif // HAIKU
-
-#if defined HAVE_XLOCALE_HEADER
-#include <xlocale.h>
-#endif
 
 #if defined HAVE_POSIX_SPAWN || defined HAVE_POSIX_SPAWNP
 #include <spawn.h>
@@ -147,7 +121,6 @@ static bear_env_t initial_env =
 
 static int initialized = 0;
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-static locale_t utf_locale;
 
 static void on_load(void) __attribute__((constructor));
 static void on_unload(void) __attribute__((destructor));
@@ -215,12 +188,6 @@ static int mt_safe_on_load(void) {
     if (0 == environ)
         return 0;
 #endif
-    // Create locale to encode UTF-8 characters
-    utf_locale = newlocale(LC_CTYPE_MASK, "", (locale_t)0);
-    if ((locale_t)0 == utf_locale) {
-        PERROR("newlocale");
-        return 0;
-    }
     // Capture current relevant environment variables
     if (0 == capture_env_t(&initial_env))
         return 0;
@@ -229,7 +196,6 @@ static int mt_safe_on_load(void) {
 }
 
 static void mt_safe_on_unload(void) {
-    freelocale(utf_locale);
     release_env_t(&initial_env);
 }
 
@@ -504,20 +470,12 @@ static void report_call(char const *const argv[]) {
 }
 
 static void write_report(int fd, char const *const argv[]) {
-    const locale_t saved_locale = uselocale(utf_locale);
-    if ((locale_t)0 == saved_locale)
-        ERROR_AND_EXIT("uselocale");
-
     const char *cwd = getcwd(NULL, 0);
     if (0 == cwd)
         ERROR_AND_EXIT("getcwd");
     if (write_json_report(fd, argv, cwd, getpid()))
         ERROR_AND_EXIT("writing json problem");
     free((void *)cwd);
-
-    const locale_t restored_locale = uselocale(saved_locale);
-    if ((locale_t)0 == restored_locale)
-        ERROR_AND_EXIT("uselocale");
 }
 
 static int write_json_report(int fd, char const *const cmd[], char const *const cwd, pid_t pid) {
